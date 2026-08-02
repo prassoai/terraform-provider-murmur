@@ -40,6 +40,11 @@ For automation, set `auth = "api_key"` and provide `MURMUR_API_KEY`. To require
 GitHub CLI authentication and disable API-key fallback, set `auth = "gh"`.
 Avoid placing API keys directly in Terraform configuration or state.
 
+## Documentation
+
+- [Provider configuration](docs/index.md)
+- [`murmur_catalog_resource`](docs/resources/catalog_resource.md)
+
 ## Support
 
 Open an issue in this repository for provider bugs and feature requests.
