@@ -51,6 +51,25 @@ JSON-backed resources use `payload` instead. Configure exactly one of
 - `generation` (String) Server-assigned version of the stored resource. It
   changes on every write.
 
+## Workspace Image Ownership
+
+Murmur image rollouts update a workspace's `imageRef`. Terraform-managed
+workspaces should therefore ignore that field:
+
+```terraform
+resource "murmur_catalog_resource" "workspace" {
+  kind     = "workspace"
+  name     = "example"
+  payload  = file("${path.module}/workspace.json")
+
+  ignore_fields = ["imageRef"]
+}
+```
+
+The payload must still provide the initial `imageRef` when creating the
+workspace. After creation, Terraform preserves the live value when other
+workspace fields change and does not report image rollouts as drift.
+
 ## Import
 
 Import an existing resource with `<kind>/<name>`:
