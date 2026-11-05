@@ -7,11 +7,11 @@ description: |-
 
 # murmur_catalog_resource
 
-Manages one named Murmur catalog resource. The Murmur API remains authoritative
-for which catalog kinds exist and for each kind's payload validation.
+Manages one named Murmur catalog resource. The Murmur API defines the catalog
+kinds and validates each kind's payload.
 
-The provider rejects secret-bearing catalog kinds because Terraform state is
-not an encrypted secret store. Manage secrets with `murmur secret`.
+Manage secrets with `murmur secret`. Terraform state is stored in plaintext, so
+the provider rejects secret-bearing catalog kinds.
 
 ## Example Usage
 
@@ -33,15 +33,15 @@ JSON-backed kinds use `payload`. Configure exactly one of `payload` or
 
 ### Required
 
-- `kind` (String) Catalog kind, such as `placement`, `workspace`, or `agent-persona`. Secret-bearing kinds are refused because Terraform state is not a secret store. Changing it replaces the resource.
+- `kind` (String) Catalog kind, such as `placement`, `workspace`, or `agent-persona`. Terraform state is stored in plaintext, so secret-bearing kinds are rejected. Changing it replaces the resource.
 - `name` (String) Catalog resource name. A top-level `name` in `payload`, if present, must equal it. Changing it replaces the resource.
 
 ### Optional
 
 - `force_ownership` (Boolean) Allows an apply to take this resource over from another system that manages it. Set it, apply once, then remove it: the takeover records `terraform` as the manager, so ownership persists after removal. It applies to updates only; adopt an existing resource with `terraform import` first.
-- `ignore_fields` (Set of String) Top-level fields owned by Murmur rather than Terraform, such as a workspace's `imageRef`, which image rollouts update. Changes to them are not reported as drift, and writes preserve their live values. `image_ref` and `imageRef` are equivalent. A create must still supply any required field. Cannot be combined with `markdown`.
+- `ignore_fields` (Set of String) Top-level fields owned by Murmur rather than Terraform, such as a workspace's `imageRef`, which image rollouts update. Terraform leaves them out of drift detection, and writes keep their live values. `image_ref` and `imageRef` are equivalent. A create must still supply any required field. Cannot be combined with `markdown`.
 - `markdown` (String) Markdown with YAML frontmatter for markdown-backed kinds such as `agent-persona`, typically `file(...)`. It must begin with a `---` line and contain a closing `---` line. Import fills it from the stored resource.
-- `payload` (String) Desired JSON document, compared semantically rather than byte for byte. Set it for JSON-backed kinds; for markdown-backed kinds it is derived from `markdown`. Configure exactly one of `payload` or `markdown`.
+- `payload` (String) Desired JSON document, compared as parsed JSON. Set it for JSON-backed kinds; for markdown-backed kinds it is derived from `markdown`. Configure exactly one of `payload` or `markdown`.
 - `tenant` (String) Assertion that this resource belongs to the provider's `tenant`. The provider always writes to the provider block's tenant and fails before any request when this value differs. When unset, create and import record the provider tenant.
 
 ### Read-Only
@@ -66,8 +66,8 @@ resource "murmur_catalog_resource" "workspace" {
 ```
 
 The payload must still provide the initial `imageRef` when creating the
-workspace. After creation, Terraform preserves the live value when other
-workspace fields change and does not report image rollouts as drift.
+workspace. After creation, Terraform keeps the live value when other
+workspace fields change and ignores image rollouts when planning.
 
 ## Managing a Catalog from Files
 
@@ -93,7 +93,7 @@ terraform {
 
 provider "murmur" {
   tenant = "github_app/example-org"
-  auth   = "gh"
+  auth   = "api_key" # reads MURMUR_API_KEY
 }
 
 locals {
@@ -129,18 +129,18 @@ resource "murmur_catalog_resource" "json" {
 }
 ```
 
-Terraform orders neither the instances of one `for_each` nor two blocks with
-no dependency between them, and a resource that refers to another is refused
-until its referent exists. Give referents a resource block of their own and
-add `depends_on` to the block that refers to them.
+Terraform applies the instances of one `for_each`, and blocks that are
+unrelated in the dependency graph, in any order, and the API accepts a resource
+that refers to another once its referent exists. Give referents a resource
+block of their own and add `depends_on` to the block that refers to them.
 
 ## Ownership
 
 Each resource has one writer. `managed_by` reports the manager recorded on the
 live resource. An edit made in the dashboard or CLI shows up as drift on the
 next plan, and applying writes the Terraform value back. When another system
-has claimed the resource, the apply is refused until `force_ownership` is set
-for one apply.
+manages the resource, the apply fails and names that system; set
+`force_ownership = true` for a single apply to take it over.
 
 ## Import
 
@@ -152,13 +152,12 @@ Import an existing resource with `<kind>/<name>`:
 terraform import murmur_catalog_resource.example placement/example
 ```
 
-Import reads the live resource and records it as Terraform's drift baseline
-without modifying it. When the configuration already describes the live
+Import reads the live resource and records it as Terraform's drift baseline. When the configuration already describes the live
 resource, the first plan is empty.
 
 ## Concurrent Changes
 
 Writes and deletes are conditional on the version Terraform previously read or
-wrote. If another actor changes the resource, Terraform reports the conflict
-instead of overwriting or deleting that newer version. Run `terraform plan` to
+wrote. If another actor changes the resource, the apply fails with a conflict
+and leaves that newer version in place. Run `terraform plan` to
 review and reconcile the change.

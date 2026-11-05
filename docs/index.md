@@ -8,7 +8,7 @@ description: |-
 
 The Murmur provider manages resources in a single Murmur tenant. It uses the
 same catalog API as the Murmur CLI and applies conditional writes, so
-concurrent changes are reported instead of silently overwritten.
+an apply that races a concurrent change fails with a conflict.
 
 ## Example Usage
 
@@ -24,17 +24,7 @@ terraform {
 
 provider "murmur" {
   tenant = "github_app/example-org"
-  auth   = "gh"
-}
-```
-
-In CI, set `MURMUR_API_KEY` to a `mur_`-prefixed service-profile API key and
-use the API-key path:
-
-```terraform
-provider "murmur" {
-  tenant = "github_app/example-org"
-  auth   = "api_key"
+  auth   = "api_key" # reads MURMUR_API_KEY
 }
 ```
 
@@ -44,18 +34,23 @@ provider "murmur" {
 ### Optional
 
 - `api_address` (String) Murmur API endpoint. Defaults to `api.murmur.dev:9090`. TLS is always enabled.
-- `api_key` (String, Sensitive) Inline `mur_`-prefixed service-profile API key, used with `auth = "api_key"` in place of `MURMUR_API_KEY`. Prefer the environment variable so the key never appears in configuration.
-- `auth` (String) Authentication mode: `gh` uses the GitHub CLI login; `api_key` uses the `api_key` attribute or `MURMUR_API_KEY`. Each uses only its own credential and never falls back to the other. Required whenever the configuration manages a Murmur resource.
-- `ca_cert` (String) Base64-encoded PEM CA certificate to trust in addition to the system roots, for an `api_address` whose certificate chain the system store does not anchor. Same format as `api.ca_cert` in the Murmur CLI's `murmur.yaml`.
+- `api_key` (String, Sensitive) Inline `mur_`-prefixed service-profile API key, used with `auth = "api_key"` in place of `MURMUR_API_KEY`. Prefer the environment variable, which keeps the key out of configuration.
+- `auth` (String) Authentication mode: `api_key` applies as a service profile, using the `api_key` attribute or `MURMUR_API_KEY`; `gh` applies as yourself, using the GitHub CLI login. Required whenever the configuration manages a Murmur resource.
+- `ca_cert` (String) Base64-encoded PEM CA certificate to trust in addition to the system roots, for an `api_address` whose certificate chains to a private CA. Same format as `api.ca_cert` in the Murmur CLI's `murmur.yaml`.
 - `tenant` (String) Tenant namespace in `{provider}/{org}` form, such as `github_app/example-org`. Required whenever the configuration manages a Murmur resource.
 
 ## Authentication
 
-Set `auth` to choose the credential. There is no default, and neither mode
-falls back to the other:
+Set `auth` to choose who Terraform acts as.
 
-- `gh` uses the GitHub CLI login from `gh auth token`. Run `gh auth login` if
-  it returns nothing.
-- `api_key` uses the provider block's `api_key` if set, otherwise
-  `MURMUR_API_KEY`. Tenants that sign in with Google have no `gh` credential
-  and use this mode.
+- `api_key` applies as a service profile. It uses the provider block's
+  `api_key` if set, otherwise `MURMUR_API_KEY`, which must hold a
+  `mur_`-prefixed API key for a service profile that has been granted the
+  permissions the configuration needs. Use this mode in CI and for any shared
+  configuration.
+- `gh` applies as yourself, with your own Murmur permissions, using the GitHub
+  CLI login from `gh auth token`. Use it to try the provider from your own
+  machine. Tenants that sign in with Google use `api_key`.
+
+[Manage Murmur with Terraform](https://docs.murmur.dev/guides/terraform) walks
+through creating the service profile, its permissions and its API key.
